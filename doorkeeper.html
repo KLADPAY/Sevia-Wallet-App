@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Door — Keeper's List</title>
+<style>
+  :root{ --bg:#160D0F; --surface:#221418; --surface2:#2D1A1E; --line:#4A2A2E;
+         --fg:#F5F2F0; --muted:#B09A94; --accent:#F7931A; --ok:#3F9B63; --bad:#C24444; }
+  *{box-sizing:border-box}
+  body{background:var(--bg); color:var(--fg); margin:0; font-family:system-ui,sans-serif; padding-bottom:40px}
+  #wrap{max-width:560px; margin:0 auto; padding:18px}
+  h1{font-size:20px; margin:10px 0 2px}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 16px; line-height:1.5}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; margin:10px 0}
+  .who{font-weight:700; font-size:15px}
+  .meta{color:var(--muted); font-size:12px; margin-top:4px; line-height:1.5}
+  .row{display:flex; gap:8px; margin-top:10px}
+  button{flex:1; border:0; border-radius:999px; padding:10px 0; font-size:13px; font-weight:700; cursor:pointer}
+  button:disabled{opacity:.55; cursor:default}
+  .b-ok{background:var(--ok); color:#0E1A12}
+  .b-bad{background:var(--bad); color:#fff}
+  .b-wait{background:var(--surface2); color:var(--muted); border:1px solid var(--line)}
+  .tag{display:inline-block; font-size:11px; font-weight:700; border-radius:999px; padding:3px 10px; margin-left:6px; vertical-align:2px}
+  .t-approved{background:rgba(63,155,99,.18); color:#7ED8A3}
+  .t-blocked{background:rgba(194,68,68,.18); color:#EFA0A0}
+  .t-pending{background:rgba(247,147,26,.15); color:var(--accent)}
+  .pledge{display:inline-block; font-size:11px; font-weight:700; border-radius:999px; padding:3px 10px; margin-left:6px;
+          vertical-align:2px; background:rgba(63,155,99,.14); color:#9FE0BC}
+  .empty{color:var(--muted); text-align:center; padding:30px 10px; line-height:1.6}
+  .err{color:#EFA0A0; text-align:center; padding:30px 10px; line-height:1.6; font-size:13px}
+  .tick{color:var(--muted); font-size:11px; text-align:center; margin-top:14px}
+  .counts{color:var(--muted); font-size:12px; margin:4px 0 2px}
+  input{width:100%; background:var(--surface2); border:1px solid var(--line); color:var(--fg);
+        border-radius:12px; padding:12px; font-size:14px; margin:6px 0}
+  .link{color:var(--accent); font-size:12px; text-decoration:none; display:inline-block; margin-top:8px; cursor:pointer}
+  .hidden{display:none}
+  .hint{font-size:11.5px; color:var(--muted); margin-top:10px; line-height:1.5}
+  .topic{font-family:ui-monospace,monospace; font-size:11.5px; background:var(--surface2); border:1px solid var(--line);
+         border-radius:10px; padding:9px; margin-top:8px; word-break:break-all; color:var(--fg)}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>The Door 🚪</h1>
+  <p class="sub">Keeper's List — everyone who opened the testnet link. Approve to let them in, block to shut them out.</p>
+
+  <div class="card hidden" id="signCard">
+    <div class="who">Owner sign-in</div>
+    <div class="meta" id="authMsg">This list opens for the owner only.</div>
+    <div class="row"><button class="b-ok" id="googleBtn">Sign in with Google</button></div>
+    <a class="link" id="pwToggle">Use email and password instead</a>
+    <div id="pwBox" class="hidden">
+      <input type="email" id="email" placeholder="your email" autocomplete="username">
+      <input type="password" id="pass" placeholder="Your password" autocomplete="current-password">
+      <div class="row"><button class="b-ok" id="pwBtn">Sign in</button></div>
+    </div>
+    <div class="row hidden" id="signOutRow"><button class="b-wait" id="signOutBtn">Sign out</button></div>
+  </div>
+
+  <p class="counts hidden" id="counts"></p>
+  <div id="list"><div class="empty">Looking at the door…</div></div>
+  <p class="tick" id="tick"></p>
+
+  <div class="card hidden" id="ringCard">
+    <div class="who">📱 Phone alerts</div>
+    <div class="meta">Install the <b>ntfy</b> app on your phone, then subscribe to this topic. Your phone rings when someone promises feedback at the door.</div>
+    <div class="topic" id="topic">sevia-door-83e8999caf3d28f8c6eaf383</div>
+    <div class="row"><button class="b-wait" id="copyBtn">Copy topic</button></div>
+    <div class="hint" id="copyMsg"></div>
+    <div class="row"><button class="b-wait" id="signOutBtn2">Sign out</button></div>
+    <div class="hint" id="whoami"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script>
+/* Keeper's console — Firebase edition. Same project as the management page. */
+const firebaseConfig = {
+  apiKey: "AIzaSyCM5SWLYJp-fXAMRUJbxmxFHjGMHu_TomQ",
+  authDomain: "sevia-amoured-wallet-63ac7.firebaseapp.com",
+  projectId: "sevia-amoured-wallet-63ac7",
+  storageBucket: "sevia-amoured-wallet-63ac7.firebasestorage.app",
+  messagingSenderId: "176742646347",
+  appId: "1:176742646347:web:6ddadf9d1937274844c3ce"
+};
+
+const OWNER_EMAILS = ["seamihub@gmail.com","seviaafrica@gmail.com"];
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+const $ = id => document.getElementById(id);
+const listEl = $("list");
+
+let watchUnsub = null;
+let rowsCache = [];
+
+/* ---------- small helpers ---------- */
+
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const short = t => (t || "unknown").slice(0, 6) + "…" + (t || "").slice(-4);
+
+function msOf(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  if (ts.seconds) return ts.seconds * 1000;
+  const n = new Date(ts).getTime();
+  return isNaN(n) ? 0 : n;
+}
+
+function fmt(ts) {
+  const ms = msOf(ts);
+  if (!ms) return "—";
+  const d = new Date(ms);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  return d.toLocaleString([], sameDay
+    ? { hour: "2-digit", minute: "2-digit" }
+    : { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+const TAG = {
+  approved: '<span class="tag t-approved">approved</span>',
+  blocked: '<span class="tag t-blocked">blocked</span>',
+  pending: '<span class="tag t-pending">pending</span>'
+};
+
+/* ---------- sign-in ---------- */
+
+function showSignIn(msg, signedIn) {
+  $("signCard").classList.remove("hidden");
+  $("authMsg").textContent = msg || "This list opens for the owner only. Sign in with your own account, then come back.";
+  $("signOutRow").classList.toggle("hidden", !signedIn);
+  $("counts").classList.add("hidden");
+  $("ringCard").classList.add("hidden");
+  listEl.innerHTML = "";
+  $("tick").textContent = "";
+}
+
+function authProblem(e) {
+  const code = (e && e.code) || "";
+  if (code === "auth/popup-blocked") return "Your browser blocked the sign-in window. Allow pop-ups for this page, then try again.";
+  if (code === "auth/unauthorized-domain") return "This web address isn't on the Firebase sign-in list yet. Add it in Firebase → Authentication → Settings → Authorized domains.";
+  if (code === "auth/operation-not-allowed") return "Google sign-in isn't switched on for this project yet. Use email and password below, or ask your agent to turn Google on.";
+  if (code === "auth/popup-closed-by-user") return "The sign-in window closed before finishing. Try again.";
+  if (code === "auth/wrong-password" || code === "auth/invalid-credential") return "That email and password didn't match. Try again.";
+  if (code === "auth/network-request-failed") return "Check your connection, then try again.";
+  return "Sign-in didn't finish (" + (code || e.message || e) + "). Try again.";
+}
+
+$("googleBtn").onclick = async () => {
+  const btn = $("googleBtn");
+  btn.disabled = true;
+  $("authMsg").textContent = "Opening Google…";
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    await auth.signInWithPopup(provider);
+  } catch (e) {
+    $("authMsg").textContent = authProblem(e);
+    btn.disabled = false;
+  }
+};
+
+$("pwToggle").onclick = () => {
+  $("pwBox").classList.toggle("hidden");
+  if (!$("pwBox").classList.contains("hidden")) $("email").focus();
+};
+
+$("pwBtn").onclick = async () => {
+  const email = $("email").value.trim();
+  const pass = $("pass").value;
+  if (!email || !pass) { $("authMsg").textContent = "Type your email and password first."; return; }
+  const btn = $("pwBtn");
+  btn.disabled = true;
+  $("authMsg").textContent = "Signing in…";
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+    $("pass").value = "";
+  } catch (e) {
+    $("authMsg").textContent = authProblem(e);
+    btn.disabled = false;
+  }
+};
+
+$("signOutBtn").onclick = async () => {
+  try { await auth.signOut(); } catch (e) {}
+};
+$("signOutBtn2").onclick = async () => {
+  try { await auth.signOut(); } catch (e) {}
+};
+
+/* ---------- the list ---------- */
+
+function startWatch() {
+  watchUnsub = db.collection("wd_visitors").onSnapshot(snap => {
+    const rows = [];
+    snap.forEach(d => rows.push(Object.assign({ id: d.id }, d.data())));
+    rows.sort((a, b) => msOf(b.last_seen) - msOf(a.last_seen));
+    rowsCache = rows;
+    render(rows);
+    $("tick").textContent = "Live — last change at " + new Date().toLocaleTimeString();
+  }, err => {
+    listEl.innerHTML = '<div class="err">The list could not load.<br>' +
+      esc(err.message || err) +
+      '<br><br>If you have just published the Firestore rules, wait a minute and refresh this page.</div>';
+  });
+}
+
+function render(rows) {
+  $("counts").classList.remove("hidden");
+  const pending = rows.filter(r => (r.status || "pending") === "pending").length;
+  const inCount = rows.filter(r => r.status === "approved").length;
+  const out = rows.filter(r => r.status === "blocked").length;
+  $("counts").textContent = rows.length
+    ? rows.length + " visitor" + (rows.length === 1 ? "" : "s") + " · " + pending + " waiting · " + inCount + " in · " + out + " shut out"
+    : "";
+
+  if (!rows.length) {
+    listEl.innerHTML = '<div class="empty">No one has knocked yet.<br>Share the testnet link — visitors show up here the moment they open it.</div>';
+    return;
+  }
+
+  listEl.innerHTML = rows.map(r => {
+    const status = r.status || "pending";
+    return '<div class="card" data-card="' + esc(r.id) + '">' +
+      '<div class="who">' + esc(r.who || "Visitor " + short(r.id)) +
+        TAG[status] +
+        (r.pledge ? '<span class="pledge">📗 promised feedback</span>' : "") +
+      '</div>' +
+      '<div class="meta">Opened ' + (Number(r.opens) || 1) + ' time' + ((Number(r.opens) || 1) === 1 ? "" : "s") +
+        ' · First seen ' + fmt(r.first_seen) + ' · Last seen ' + fmt(r.last_seen) + '</div>' +
+      '<div class="row">' +
+        '<button class="b-ok" data-act="approved" data-token="' + esc(r.id) + '"' + (status === "approved" ? " disabled" : "") + '>Let in</button>' +
+        '<button class="b-bad" data-act="blocked" data-token="' + esc(r.id) + '"' + (status === "blocked" ? " disabled" : "") + '>Shut out</button>' +
+        '<button class="b-wait" data-act="pending" data-token="' + esc(r.id) + '"' + (status === "pending" ? " disabled" : "") + '>Waiting room</button>' +
+      '</div>' +
+    '</div>';
+  }).join("");
+}
+
+listEl.addEventListener("click", async ev => {
+  const btn = ev.target.closest("button[data-act]");
+  if (!btn) return;
+  const token = btn.getAttribute("data-token");
+  const status = btn.getAttribute("data-act");
+  const card = btn.closest("[data-card]");
+  const buttons = card ? card.querySelectorAll("button") : [btn];
+  buttons.forEach(b => b.disabled = true);
+  try {
+    await db.collection("wd_visitors").doc(token).update({ status: status });
+  } catch (e) {
+    buttons.forEach(b => b.disabled = false);
+    alert("That didn't save. " + (e.message || e));
+  }
+});
+
+/* ---------- auth wiring ---------- */
+
+auth.onAuthStateChanged(user => {
+  if (watchUnsub) { watchUnsub(); watchUnsub = null; }
+
+  if (!user) {
+    showSignIn("This list opens for the owner only. Sign in with your own account, then come back.", false);
+    $("googleBtn").disabled = false;
+    return;
+  }
+
+  const email = (user.email || "").toLowerCase();
+  if (!OWNER_EMAILS.includes(email)) {
+    showSignIn("Signed in as " + (user.email || "another account") + " — this list opens for the owner only.", true);
+    return;
+  }
+
+  $("signCard").classList.add("hidden");
+  $("ringCard").classList.remove("hidden");
+  $("whoami").textContent = "Signed in as " + (user.email || "owner") + ".";
+  if (!rowsCache.length) listEl.innerHTML = '<div class="empty">Looking at the door…</div>';
+  startWatch();
+});
+
+/* ---------- phone topic ---------- */
+
+$("copyBtn").onclick = async () => {
+  const text = $("topic").textContent.trim();
+  try {
+    await navigator.clipboard.writeText(text);
+    $("copyMsg").textContent = "Copied. Paste it into the ntfy app under Subscribe to topic.";
+  } catch (e) {
+    $("copyMsg").textContent = "Couldn't copy automatically — type the topic into the ntfy app by hand.";
+  }
+};
+</script>
+</body>
+</html>

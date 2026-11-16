@@ -1,0 +1,32 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// Sevia wallet door — visitor list
+//
+// Paste this WHOLE block inside the rules you already have, just above the
+// last two closing braces (the ones that end "service cloud.firestore" and
+// "match /databases/{database}/documents"). Leave every other line exactly
+// as it is, then press Publish.
+//
+// What it allows:
+//   • anyone may create a "pending" visitor row, and anyone may read rows —
+//     visitors are anonymous, so the door and the wallet page need this
+//   • a visitor may only change their own name / pledge / open count /
+//     "notified" flag while they are still pending — never their status
+//   • only seamihub@gmail.com may approve, block, reset or delete a visitor
+//
+// What it does NOT allow: a visitor changing their own status, deleting rows,
+// or touching anything else in the project.
+// ─────────────────────────────────────────────────────────────────────────────
+match /wd_visitors/{token} {
+  allow create: if request.resource.data.status == 'pending' &&
+                   request.resource.data.keys().hasOnly(
+                     ['token', 'who', 'status', 'pledge', 'opens', 'first_seen', 'last_seen', 'notified']);
+
+  allow read: if true;
+
+  allow update: if (request.auth != null && request.auth.token.email == 'seamihub@gmail.com') ||
+                   (request.resource.data.diff(resource.data).affectedKeys()
+                      .hasOnly(['who', 'pledge', 'opens', 'last_seen', 'notified']) &&
+                    resource.data.status == 'pending');
+
+  allow delete: if request.auth != null && request.auth.token.email == 'seamihub@gmail.com';
+}
