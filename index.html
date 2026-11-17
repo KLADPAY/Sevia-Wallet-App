@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sevia Door">
+<meta name="theme-color" content="#160D0F">
+
+<title>Sevia Wallet — Testnet</title>
+<style>
+  :root{ --bg:#160D0F; --surface:#221418; --surface2:#2D1A1E; --line:#4A2A2E;
+         --fg:#F5F2F0; --muted:#B09A94; --accent:#F7931A; }
+  *{box-sizing:border-box}
+  body{background:var(--bg); color:var(--fg); margin:0; font-family:system-ui,sans-serif}
+  #phone{max-width:430px; margin:0 auto; min-height:100vh; padding:20px; display:flex; flex-direction:column; justify-content:center}
+  .center{text-align:center}
+  .blogo{width:76px; height:76px; margin:0 auto 14px; border-radius:50%; background:var(--accent);
+         color:#1A1206; font-size:44px; font-weight:800; display:flex; align-items:center; justify-content:center}
+  h1{font-size:22px; margin:8px 0 6px}
+  .sub{color:var(--muted); font-size:14px; line-height:1.5; margin:0 0 14px}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:16px; margin:12px 0}
+  .spinner{display:inline-block; width:16px; height:16px; border:2px solid var(--muted); border-top-color:var(--accent);
+           border-radius:50%; animation:spin .8s linear infinite; vertical-align:-3px; margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  input{width:100%; background:var(--surface2); border:1px solid var(--line); color:var(--fg);
+        border-radius:12px; padding:13px; font-size:15px; margin:8px 0}
+  button{display:block; width:100%; border:0; border-radius:999px; padding:13px; font-size:15px; font-weight:700;
+         background:var(--accent); color:#1A1206; margin-top:10px; cursor:pointer}
+  button:disabled{opacity:.55; cursor:default}
+  .hidden{display:none}
+  .note{font-size:12px; color:var(--muted); margin-top:14px}
+  .note.tight{margin:6px 0 0}
+  .errline{font-size:12px; color:#EFA0A0; margin-top:10px; min-height:16px}
+</style>
+</head>
+<body>
+<div id="phone">
+  <div class="center">
+    <div class="blogo">B</div>
+    <h1>Sevia Wallet — Testnet</h1>
+  </div>
+
+  <div id="st-checking" class="card center">
+    <span class="spinner"></span>Checking with the door…
+  </div>
+
+  <div id="st-waiting" class="card center hidden">
+    <p class="sub" style="margin-bottom:10px"><b style="color:var(--fg)">You're at the door.</b><br>
+    The owner can see you arrived and will let you in shortly. This page opens the wallet by itself — you can leave it open.</p>
+    <span class="spinner"></span><span id="waitTxt">Waiting for approval…</span>
+    <div id="whoBox">
+      <input type="text" id="who" maxlength="120" placeholder="Your name or organisation">
+      <label style="display:flex; gap:10px; align-items:flex-start; text-align:left; font-size:13px; color:var(--muted); margin:10px 0 2px; line-height:1.45">
+        <input type="checkbox" id="pledge" style="width:18px; height:18px; margin:0; flex:none; accent-color:#F7931A">
+        <span>I promise to send feedback on this wallet after testing it.</span>
+      </label>
+      <button id="whoBtn" disabled>Introduce myself 🔑</button>
+      <p class="note tight" id="keyHint" style="color:#EFA0A0">The honest key: tick the promise above to unlock this button — everyone must promise, no exceptions.</p>
+      <p class="note">If you promise feedback, the owner is told on their phone right away — and is much more likely to let you in.</p>
+    </div>
+    <p class="note" id="whoThanks" style="display:none; margin:4px 0 0"></p>
+    <p class="errline" id="whoNote"></p>
+  </div>
+
+  <div id="st-approved" class="card center hidden">
+    <p class="sub" style="margin:0 0 6px"><b style="color:var(--fg)">You're in.</b><br>Opening the wallet…</p>
+    <span class="spinner"></span><span>One moment</span>
+  </div>
+
+  <div id="st-blocked" class="card center hidden">
+    <p class="sub" style="margin:0">Not available right now.<br>If you were invited, please contact the owner of this link.</p>
+  </div>
+
+  <p class="note center" id="doorNote" style="margin-top:16px">Testnet only — free practice coins, not real money.</p>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script>
+/* Sevia door — Firebase edition.
+   Same project the owner already uses: awuraba-frozen-foods.
+   Visitors are anonymous: their key is a random id kept in this browser. */
+const firebaseConfig = {
+  apiKey: "AIzaSyCM5SWLYJp-fXAMRUJbxmxFHjGMHu_TomQ",
+  authDomain: "sevia-amoured-wallet-63ac7.firebaseapp.com",
+  projectId: "sevia-amoured-wallet-63ac7",
+  storageBucket: "sevia-amoured-wallet-63ac7.firebasestorage.app",
+  messagingSenderId: "176742646347",
+  appId: "1:176742646347:web:6ddadf9d1937274844c3ce"
+};
+
+const NTFY_TOPIC = "https://ntfy.sh/sevia-door-83e8999caf3d28f8c6eaf383";
+
+/* Only these two emails walk straight through — everyone else promises. */
+const OWNER_EMAILS = ["seamihub@gmail.com", "seviaafrica@gmail.com"];
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+const FieldValue = firebase.firestore.FieldValue;
+
+/* one stable visitor id per browser */
+let token = localStorage.getItem("seviaFbDoor");
+if (!token) {
+  token = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2))
+            .replaceAll("-", "");
+  localStorage.setItem("seviaFbDoor", token);
+}
+const ref = db.collection("wd_visitors").doc(token);
+
+const $ = id => document.getElementById(id);
+const STATES = ["st-checking", "st-waiting", "st-approved", "st-blocked"];
+const show = id => STATES.forEach(s => $(s).classList.toggle("hidden", s !== id));
+
+let leaving = false;      // already heading to the wallet
+let firstAnswer = false;  // has the door ever answered us?
+let opened = false;       // have we counted this visit yet
+let justCreated = false;  // this page load created the row (opens already = 1)
+
+/* ---------- the door ---------- */
+
+async function readDoor() {
+  const snap = await ref.get();
+  if (snap.exists) return snap.data();
+
+  /* First visit: create a pending row. Never touch status on an existing row. */
+  try {
+    await ref.set({
+      token: token,
+      who: null,
+      status: "pending",
+      pledge: false,
+      opens: 1,
+      first_seen: FieldValue.serverTimestamp(),
+      last_seen: FieldValue.serverTimestamp(),
+      notified: false
+    });
+    justCreated = true;
+    return { token: token, who: null, status: "pending", pledge: false, opens: 1, notified: false };
+  } catch (e) {
+    /* Another tab may have created it a split second ago — read once more. */
+    const again = await ref.get();
+    if (again.exists) return again.data();
+    throw e;
+  }
+}
+
+/* Best effort: count the visit and keep "last seen" fresh. Rules only allow this
+   while the visitor is still pending, so failures after approval are normal. */
+async function touch(count) {
+  try {
+    const payload = count
+      ? { opens: FieldValue.increment(1), last_seen: FieldValue.serverTimestamp() }
+      : { last_seen: FieldValue.serverTimestamp() };
+    await ref.set(payload, { merge: true });
+  } catch (e) { /* silent — never bother the visitor with this */ }
+}
+
+function paint(data) {
+  const status = (data && data.status) || "pending";
+  if (status === "approved") {
+    if (leaving) return;
+    leaving = true;
+    show("st-approved");
+    setTimeout(() => { location.href = "./wallet-fb.html"; }, 700);
+    return;
+  }
+  if (status === "blocked") { show("st-blocked"); return; }
+
+  show("st-waiting");
+  renderWhoBox(data);
+}
+
+let whoShown = null;
+function renderWhoBox(data) {
+  if (!data || !data.who) return;
+  const key = data.who + "|" + !!data.pledge;
+  if (whoShown === key) return;
+  whoShown = key;
+  $("whoThanks").innerHTML =
+    (data.pledge
+      ? "Thank you, " + esc(data.who) + " — the owner has been told on their phone that you're waiting with a feedback pledge."
+      : "Thank you, " + esc(data.who) + " — the owner can see your name now.");
+  $("whoThanks").style.display = "block";
+  $("whoBox").style.display = "none";
+  $("whoNote").textContent = "";
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function tick() {
+  try {
+    const data = await readDoor();
+    firstAnswer = true;
+    if (!opened) { opened = true; touch(!justCreated); }
+    paint(data);
+  } catch (e) {
+    const note = "The door is slow to answer — retrying…";
+    if (!firstAnswer) {
+      show("st-waiting");
+      $("waitTxt").textContent = "Trying to reach the door…";
+      $("whoNote").textContent = note;
+    } else {
+      $("waitTxt").textContent = "Still waiting for the door…";
+      $("whoNote").textContent = note;
+    }
+  }
+}
+
+tick();
+setInterval(tick, 3000);
+
+/* ---------- introducing myself ---------- */
+
+async function introduce() {
+  const input = $("who");
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+
+  const pledged = $("pledge").checked;
+  if (!pledged) return;   /* the honest key: no promise, no knock */
+  const btn = $("whoBtn");
+  btn.disabled = true;
+  $("whoNote").textContent = "";
+
+  try {
+    await ref.set({ who: name, pledge: !!pledged }, { merge: true });
+  } catch (e) {
+    btn.disabled = false;
+    $("whoNote").textContent = "Couldn't send that just now — check your connection and try again.";
+    return;
+  }
+
+  renderWhoBox({ who: name, pledge: pledged });
+  if (pledged) ringOwnerPhone(name);
+}
+
+$("whoBtn").onclick = introduce;
+$("who").addEventListener("keydown", e => { if (e.key === "Enter") introduce(); });
+
+/* The honest key: the button only unlocks when the promise is ticked
+   and a name is given. */
+function refreshKey() {
+  const ok = $("pledge").checked && $("who").value.trim().length > 0;
+  $("whoBtn").disabled = !ok;
+  $("keyHint").textContent = ok
+    ? "The honest key is in the lock. Tap the button to knock."
+    : "The honest key: tick the promise and give your name to unlock the button — everyone must promise, no exceptions.";
+}
+$("pledge").addEventListener("change", refreshKey);
+$("who").addEventListener("input", refreshKey);
+
+/* A phone nudge for the owner, only once per visitor. */
+async function ringOwnerPhone(name) {
+  try {
+    const snap = await ref.get();
+    if (snap.exists && snap.data().notified) return;
+
+    const res = await fetch(NTFY_TOPIC, {
+      method: "POST",
+      headers: {
+        "Title": "Someone is at the Sevia door",
+        "Priority": "high",
+        "Tags": "door"
+      },
+      body: name + " promises to send feedback and is waiting to be let in. Open the Doorkeeper page to approve."
+    });
+    if (res.ok) await ref.set({ notified: true }, { merge: true });
+  } catch (e) { /* the ring is a bonus — the waiting room still works */ }
+}
+
+/* ---------- the owner's private entrance ----------
+   Sena (and only her two emails) signs in on the door page and walks
+   straight through: no promise asked, no waiting room. */
+let ownerPassing = false;
+async function ownerWalkThrough(user) {
+  if (ownerPassing) return;
+  ownerPassing = true;
+  show("st-approved");
+  try {
+    await readDoor();
+    await ref.set({
+      status: "approved",
+      who: "Owner — " + user.email,
+      pledge: true
+    }, { merge: true });
+    setTimeout(() => { location.href = "./wallet-fb.html"; }, 600);
+  } catch (e) {
+    ownerPassing = false;
+    show("st-waiting");
+    $("whoNote").textContent = "Couldn't open the owner's door — try again.";
+  }
+}
+
+auth.onAuthStateChanged(user => {
+  if (user && user.email && OWNER_EMAILS.includes(user.email)) {
+    ownerWalkThrough(user);
+  }
+});
+
+/* small owner doorbell link under the waiting room */
+const ownerBar = document.createElement("p");
+ownerBar.className = "note center";
+ownerBar.style.marginTop = "10px";
+ownerBar.innerHTML = '<a href="#" id="ownerLink" style="color:var(--muted)">Owner? Sign in to walk straight in.</a>';
+document.getElementById("phone").appendChild(ownerBar);
+document.getElementById("ownerLink").onclick = async (e) => {
+  e.preventDefault();
+  try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+  catch (err) { $("whoNote").textContent = "Sign-in didn't open — try again."; }
+};
+</script>
+</body>
+</html>
