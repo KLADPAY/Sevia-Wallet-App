@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sevia Video">
+<meta name="theme-color" content="#160D0F">
+<title>Sevia Wallet — How I Tested It</title>
+<style>
+  :root{ --bg:#160D0F; --surface:#221418; --line:#4A2A2E; --fg:#F5F2F0; --muted:#B09A94; --accent:#F7931A; }
+  *{box-sizing:border-box}
+  body{background:var(--bg); color:var(--fg); margin:0; font-family:system-ui,sans-serif}
+  #wrap{max-width:520px; margin:0 auto; padding:18px}
+  h1{font-size:20px; color:var(--accent); text-align:center; margin:14px 0 4px}
+  .sub{text-align:center; color:var(--muted); font-size:13px; margin:0 0 16px}
+  video{width:100%; border-radius:16px; border:1px solid var(--line); background:#000; display:block}
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px; margin:14px 0}
+  .mono{font-family:ui-monospace,monospace; font-size:11.5px; background:#000; border:1px solid var(--line);
+        border-radius:8px; padding:8px; word-break:break-all}
+  .muted{color:var(--muted); font-size:12.5px; line-height:1.55}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>How I Tested It</h1>
+  <p class="sub">One minute · real · narrated by Sena Ami · Bitcoin Testnet4</p>
+
+  <video controls playsinline preload="metadata" poster="">
+    <source src="sevia-video.mp4" type="video/mp4">
+    Your phone cannot play this video here — open the chat and download the file instead.
+  </video>
+
+  <div class="card">
+    <div class="muted"><b style="color:var(--fg)">The story in one line:</b> a visitor promises feedback at my door → I let them in → the wallet opens → I send 1,000 sats → the transaction is verified on the public blockchain.</div>
+    <div class="mono" style="margin-top:10px">62b5dead6b1168158de20ab6e6fbf920e0fbd0d6e39e0b6dc555de3cc59b6c51</div>
+    <div class="muted" style="margin-top:8px">Check it yourself: mempool.space/testnet4 or blockstream.info/testnet4 — paste the ID.</div>
+  </div>
+
+  <p class="muted" style="text-align:center">Tap ▶ to play · turn the phone sideways for a big screen</p>
+</div>
+</body>
+</html>
